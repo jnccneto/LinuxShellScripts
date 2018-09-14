@@ -33,7 +33,7 @@ fi
 
 check_eth
 CheckRemotePing liber4e.com
-Report="${Report} MYSQL:`mysqladmin -u liberdevel -pliberdevel ping` "
+Report="${Report} MYSQL:`mysqladmin ping` "
 Report="${Report} HTTP:`service httpd status | sed 's/\(^httpd \).* \(running...$\)/\2/g'` "
 Report="${Report} NAMED:`service named status  | grep server | awk '{print $5}'` "
 Report="${Report} MAIL:`service sendmail status | grep sendmail | awk '{print $8}'` "
