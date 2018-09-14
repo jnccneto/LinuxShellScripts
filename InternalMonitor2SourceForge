@@ -1,0 +1,43 @@
+#!/bin/bash
+
+#VARS
+EthServerTest=google.com
+Report=`date +%m_%d_%H_%M`
+SmsUser=''
+SmsUserPasswd=''
+SmsApiID=''
+MobileNumber=''
+
+# FUNCTIONS
+function check_eth
+{
+if ping -c 5 $EthServerTest 1> /dev/null 2> /dev/null
+then
+NetTest=`ping -c 5 $EthServerTest | awk '/transmitted/ {print $4}' 2> /dev/null`
+Report="${Report} InPingOk:${NetTest}"
+if [ ! $NetTest -eq 5 ]; then service network restart;fi
+fi
+}
+
+function CheckRemotePing
+{
+PingCount=`lynx -dump http://cgi.vastnet.net/cgi-bin/nph-ping.cgi?${1} | awk '/transmitted/ {print $4}'`
+if [ $PingCount -lt 10 ];then service network restart && service shorewall restart
+else Report="${Report} RmPingOK"
+fi
+}
+
+
+# ACTIONS
+
+
+check_eth
+CheckRemotePing liber4e.com
+Report="${Report} MYSQL:`mysqladmin -u liberdevel -pliberdevel ping` "
+Report="${Report} HTTP:`service httpd status | sed 's/\(^httpd \).* \(running...$\)/\2/g'` "
+Report="${Report} NAMED:`service named status  | grep server | awk '{print $5}'` "
+Report="${Report} MAIL:`service sendmail status | grep sendmail | awk '{print $8}'` "
+
+Report=`echo ${Report} | sed 's/ /+/g'`
+lynx -dump "http://api.clickatell.com/http/sendmsg?user=${SmsUser}&password=${SmsUserPasswd}&api_id=${SmsApiID}&to=${MobileNumber}&from=351999999999&text=${Report}"
+
