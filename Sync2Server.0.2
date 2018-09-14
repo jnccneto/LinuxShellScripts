@@ -1,0 +1,95 @@
+#!/bin/bash
+#
+# @copyright Copyright (C) 2006 Liber4e.com All rights reserved.
+# @copyright Copyright (C) 2006 José Nuno Neto All rights reserved.
+# @license http://www.gnu.org/copyleft/gpl.html GNU/GPL
+# Author Contacts: jose.neto@liber4e.com http://www.liber4e.com
+# Description: Liber4Sync is a bash script used to automate updates from development servers to Live Servers
+# Fill in the Needed Vars and the ServersInfo Array, one for each Site to update with values separated by ":"
+
+# Needed Vars
+LocalServer=''
+RemoteServer=''
+LocalDbUser=''
+LocalDbUserPasswd=''
+RemoteDbUser=''
+RemoteDbUserPasswd=''
+RemoteSshUser=''
+WorkingDir='/tmp/'
+RemoteWorkingDir='/tmp/'
+InvertedSync='1'
+
+# Sites to be Updated
+# ServersInfo = "Active LocalDir RemoteDir LocalDB LocalDB.TABLES RemoteDB RsyncExcludeRules"
+ServersInfo[0] = "Active:LocalDir:RemoteDir:LocalDB:LocalDB.TABLES:RemoteDB:RsyncExcludeRules"
+
+if [ ! -d $WorkingDir ]; then echo "We Need a WorkingDir......";exit;fi
+
+echo "Sync ${LocalServer} WITH ${RemoteServer}"
+
+for ((i=0; i<${#ServersInfo[*]}; i++));
+do 
+
+Vars=${ServersInfo[$i]}
+
+if [ $Vars ]
+then
+Active=`echo $Vars | awk -F":" '{print $1}'`
+LocalDir=`echo $Vars | awk -F":" '{print $2}'`
+RemoteDir=`echo $Vars | awk -F":" '{print $3}'`
+LocalDb=`echo $Vars | awk -F":" '{print $4}'`
+DbTables=`echo $Vars | awk -F":" '{print $5}'`
+RemoteDb=`echo $Vars | awk -F":" '{print $6}'`
+ExcludeFiles=`echo $Vars | awk -F":" '{print $7}'`
+
+if [ $Active -eq 1 ]
+then 
+echo "SYNCing LocalDir=${LocalDir} RemoteDir=${RemoteDir} LocalDB=${LocalDb} LocalDbTables=${LocalDbTables} RemoteDB=${RemoteDb} ExcludeFiles=${ExcludeFiles}"
+echo "Press Enter to Skip,Input anything else to proceed"
+
+read Check
+if [ $Check ]
+	then
+	echo "STARTING SYNCING........"
+	if [ $InvertedSync == '0' ]
+		then
+			echo "rsync -avzn ${ExcludeFiles} ${LocalDir} ${RemoteSshUser}@${RemoteServer}:${RemoteDir} "
+			rsync -avzn --exclude=${ExcludeFiles} ${LocalDir} ${RemoteSshUser}@${RemoteServer}:${RemoteDir}
+			
+			echo "mysqldump -u ${LocalDbUser} -p${LocalDbUserPasswd} ${LocalDb} ${DbTables} > ${WorkingDir}${LocalDb} "
+			mysqldump -u ${LocalDbUser} -p${LocalDbUserPasswd} ${LocalDb} ${LocalDbTables} > ${WorkingDir}${LocalDb}
+			
+			echo "scp ${WorkingDir}${LocalDb} ${RemoteSshUser}@${RemoteServer}:${RemoteWorkingDir}${LocalDb}"
+			scp ${WorkingDir}${LocalDb} ${RemoteSshUser}@${RemoteServer}:${RemoteWorkingDir}${LocalDb}
+			
+			echo "ssh ${RemoteSshUser}@${RemoteServer} mysql -u ${RemoteDbUser} -p${LocalDbUserPasswd} ${RemoteDb} < ${RemoteWorkingDir}${LocalDb} "
+			ssh ${RemoteSshUser}@${RemoteServer} "mysql -u ${RemoteDbUser} -p${LocalDbUserPasswd} ${RemoteDb} < ${RemoteWorkingDir}${LocalDb}"
+			
+			echo "ssh ${RemoteSshUser}@${RemoteServer} rm ${RemoteWorkingDir}${LocalDb}"
+			ssh ${RemoteSshUser}@${RemoteServer} "rm ${RemoteWorkingDir}${LocalDb}"
+		else
+			echo "rsync -avz ${ExcludeFiles} ${RemoteSshUser}@${RemoteServer}:${RemoteDir} ${LocalDir} "
+			rsync -avz --exclude=${ExcludeFiles} ${RemoteSshUser}@${RemoteServer}:${RemoteDir} ${LocalDir}
+			
+			echo "ssh ${RemoteSshUser}@${RemoteServer} mysqldump -aQn -u ${RemoteDbUser} -p${RemoteDbUserPasswd} ${RemoteDb} ${DbTables} > ${RemoteWorkingDir}${RemoteDb} "
+			ssh ${RemoteSshUser}@${RemoteServer} "mysqldump -aQn -u ${RemoteDbUser} -p${RemoteDbUserPasswd} ${RemoteDb} ${DbTables} > ${RemoteWorkingDir}${RemoteDb}"
+			
+			echo "scp ${RemoteSshUser}@${RemoteServer}:${RemoteWorkingDir}${RemoteDb} ${WorkingDir}${RemoteDb}" 
+			scp ${RemoteSshUser}@${RemoteServer}:${RemoteWorkingDir}${RemoteDb} ${WorkingDir}${RemoteDb}
+			
+			echo "mysql -u ${LocalDbUser} -p${LocalDbUserPasswd} ${LocalDb} < ${WorkingDir}${RemoteDb} "
+			mysql -u ${LocalDbUser} -p${LocalDbUserPasswd} ${LocalDb} < ${WorkingDir}${RemoteDb}
+
+			echo " rm ${WorkingDir}${RemoteDb}"
+			rm ${WorkingDir}${RemoteDb}
+		fi
+	else
+	echo "SKIPING THIS SYNC"
+	fi
+fi
+
+fi
+
+done
+
+
